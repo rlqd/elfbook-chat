@@ -4,7 +4,18 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import type { Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 
-async function exchangeMessages(ctx: MutationCtx, userId: Id<"users">, chatId: Id<"chats">, keyId: Id<"keys">, model: string, userText: string): Promise<void> {
+// Must support structured outputs, used to generate chat title and tags
+const utilityModel = process.env.ELF_UTILITY_MODEL ?? 'google/gemini-2.0-flash-lite-001';
+
+async function exchangeMessages(
+    ctx: MutationCtx,
+    userId: Id<"users">,
+    chatId: Id<"chats">,
+    keyId: Id<"keys">,
+    model: string,
+    userText: string,
+    isNew: boolean,
+): Promise<void> {
     const userMsgId = await ctx.db.insert("messages", {
         userId,
         chatId,
@@ -25,6 +36,7 @@ async function exchangeMessages(ctx: MutationCtx, userId: Id<"users">, chatId: I
         chatId,
         keyId,
         model,
+        isNew,
     });
 }
 
@@ -69,6 +81,21 @@ export const markMessageDone = internalMutation({
     },
 });
 
+export const updateChatInfo = internalMutation({
+    args: {
+        chatId: v.id("chats"),
+        title: v.string(),
+        tags: v.array(v.string()),
+    },
+
+    handler: async (ctx, args) => {
+        await ctx.db.patch(args.chatId, {
+            title: args.title,
+            tags: args.tags,
+        });
+    },
+});
+
 export const loadMessageHistoryAsContext = internalQuery({
     args: {
         chatId: v.id("chats"),
@@ -97,6 +124,7 @@ export const generateResponse = internalAction({
         messageId: v.id("messages"),
         keyId: v.id("keys"),
         model: v.string(),
+        isNew: v.boolean(),
     },
 
     handler: async (ctx, args) => {
@@ -141,7 +169,7 @@ export const generateResponse = internalAction({
                             const content = parsed.choices[0].delta.content;
                             if (content) {
                                 msgBuf += content;
-                                await ctx.runMutation(internal.chat.streamMessageText, {messageId: args.messageId, newText: msgBuf});
+                                await ctx.runMutation(internal.chat.streamMessageText, { messageId: args.messageId, newText: msgBuf });
                             }
                         } catch (e) {
                             // Ignore invalid JSON
@@ -152,7 +180,54 @@ export const generateResponse = internalAction({
         } finally {
             reader.cancel();
         }
-        await ctx.runMutation(internal.chat.markMessageDone, {messageId: args.messageId});
+        await ctx.runMutation(internal.chat.markMessageDone, { messageId: args.messageId });
+        if (args.isNew) {
+            // messages.push({ role: 'assistant', content: msgBuf });
+            // messages.push({ role: 'user', content: 'Please generate chat info (metadata) based on the message content above, strictly follow the provided schema. Example: {"title": "Chat Title", "tags": ["tag1", "tag2"]}' });
+            // const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+            //     method: 'POST',
+            //     headers: {
+            //         Authorization: `Bearer ${keySecret}`,
+            //         'Content-Type': 'application/json',
+            //     },
+            //     body: JSON.stringify({
+            //         model: utilityModel,
+            //         messages,
+            //         response_format: {
+            //             type: 'json_schema',
+            //             json_schema: {
+            //                 name: 'chat_info',
+            //                 strict: true,
+            //                 schema: {
+            //                     type: 'object',
+            //                     properties: {
+            //                         title: {
+            //                             type: 'string',
+            //                             description: 'Very short chat title',
+            //                         },
+            //                         tags: {
+            //                             type: 'array',
+            //                             description: 'Between 1 and 3 relevant single word tags',
+            //                             items: {
+            //                                 type: 'string',
+            //                             },
+            //                         },
+            //                     },
+            //                     required: ['title', 'tags'],
+            //                     additionalProperties: false,
+            //                 },
+            //             },
+            //         },
+            //     }),
+            // });
+            // const data = await response.json();
+            // const chatInfo = data.choices[0].message.content;
+            // await ctx.runMutation(internal.chat.updateChatInfo, {
+            //     chatId: args.chatId,
+            //     title: chatInfo.title,
+            //     tags: chatInfo.tags,
+            // });
+        }
     },
 });
 
@@ -177,14 +252,21 @@ export const startChat = mutation({
         if (!key || key.userId !== userId) {
             throw new Error("Key not found");
         }
+        const dateFormatterForDefaultTitle = new Intl.DateTimeFormat(undefined, {
+            day: 'numeric',
+            month: 'short',
+            hour: '2-digit',
+            minute: '2-digit',
+            hourCycle: 'h23',
+        });
         const chatId = await ctx.db.insert("chats", {
             userId,
             spaceId: args.spaceId,
-            title: "New Chat",
+            title: `Chat at ${dateFormatterForDefaultTitle.format()}`,
             created: BigInt(Date.now()),
             tags: [],
         });
-        await exchangeMessages(ctx, userId, chatId, key._id, args.model, args.messageText);
+        await exchangeMessages(ctx, userId, chatId, key._id, args.model, args.messageText, true);
         return chatId;
     },
 });
@@ -210,7 +292,7 @@ export const sendMessage = mutation({
         if (!key || key.userId !== userId) {
             throw new Error("Key not found");
         }
-        await exchangeMessages(ctx, userId, chat._id, key._id, args.model, args.text);
+        await exchangeMessages(ctx, userId, chat._id, key._id, args.model, args.text, false);
     },
 });
 

@@ -6,9 +6,20 @@
 }
 
 body {
-    color: var(--color-primary);
-    background: var(--color-background);
-    font-family: Arial, Helvetica, sans-serif;
+  color: var(--color-primary);
+  background: var(--color-background);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.elf-message code {
+  background: #fff;
+  padding: 2px 4px;
+  --tw-shadow-alpha: 30%;
+  --tw-shadow: 0 1px 3px 0 var(--tw-shadow-color, oklab(from rgb(0 0 0 / 0.1) l a b / 30%)), 0 1px 2px -1px var(--tw-shadow-color, oklab(from rgb(0 0 0 / 0.1) l a b / 30%));
+  box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
+}
+.elf-message pre {
+  display: inline-block;
 }
 
 /* 

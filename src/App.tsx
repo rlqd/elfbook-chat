@@ -4,6 +4,7 @@ import AuthForm from "./screens/AuthForm";
 import SpaceManager from "./screens/SpaceManager";
 import NewChat from "./screens/NewChat";
 import ExistingChat from "./screens/ExistingChat";
+import Space from "./layouts/Space";
 
 export default function App() {
   return (
@@ -12,8 +13,10 @@ export default function App() {
         <HashRouter>
           <Routes>
             <Route index element={<SpaceManager />} />
-            <Route path=":spaceId/new" element={<NewChat />} />
-            <Route path=":spaceId/c/:chatId" element={<ExistingChat />} />
+            <Route path=":spaceId" element={<Space />}>
+              <Route path="new" element={<NewChat />} />
+              <Route path="c/:chatId" element={<ExistingChat />} />
+            </Route>
           </Routes>
         </HashRouter>
       </Authenticated>

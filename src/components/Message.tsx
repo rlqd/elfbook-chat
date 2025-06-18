@@ -1,5 +1,7 @@
 import { Doc } from "../../convex/_generated/dataModel";
 import type { MessageType } from "../../convex/schema";
+import Markdown from "react-markdown";
+import rehypeHighlight from "rehype-highlight";
 
 const statusMessages: Partial<Record<MessageType,string>> = {
   "loading": "Loading...",
@@ -7,14 +9,15 @@ const statusMessages: Partial<Record<MessageType,string>> = {
 };
 
 export default function Message({ msg }: { msg: Doc<"messages"> }) {
+  const isMine = msg.type === 'outgoing';
   return (
-    <div className={"flex gap-2 " + (msg.type === 'outgoing' ? 'text-blue-900' : '')}>
+    <div className={"elf-message flex gap-2 " + (isMine ? 'text-blue-900' : '')}>
       <div className="pr-2 w-20 border-r border-dotted text-right">
-        { msg.type === 'outgoing' ? 'me:' : 'model:' }
+        { isMine ? 'me:' : 'model:' }
       </div>
-      <pre className="block grow">
-        { statusMessages[msg.type] ?? msg.body }
-      </pre>
+      <div className="block grow w-full min-w-0 text-wrap">
+        { statusMessages[msg.type] ?? (isMine ? <pre>{msg.body}</pre> : <Markdown rehypePlugins={[rehypeHighlight]}>{msg.body}</Markdown>) }
+      </div>
     </div>
   );
 }

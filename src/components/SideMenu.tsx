@@ -47,6 +47,7 @@ export default function SideMenu({ space, className }: SideMenuProps) {
         </div>
       ) : null}
       <div className="mt-2 pt-2 border-t border-dotted">
+        {visibleChats.length ? <><Link to={`/${space._id}/new`}>+ New Chat</Link><br/></> : null}
         {visibleChats.length ? visibleChats.map(c => (
           <><Link to={`/${space._id}/c/${c._id}`}>{c.title}</Link><br/></>
         )) : (selectedTags.length ? 'No matching chats' : 'No chats yet')}
