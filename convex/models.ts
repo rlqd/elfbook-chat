@@ -6,9 +6,10 @@ import { internal } from "./_generated/api";
 
 export const listModels = query({
     handler: async (ctx) => {
-        return await ctx.db
+        const models = await ctx.db
             .query("models")
             .collect();
+        return models.sort((a,b) => a.title.localeCompare(b.title));
     },
 });
 
@@ -17,6 +18,7 @@ export const saveModels = internalMutation({
     models: v.array(v.any()),
     provider: v.string(),
     idField: v.string(),
+    titleField: v.string(),
   },
   handler: async (ctx, args) => {
     const models = await ctx.db
@@ -27,12 +29,14 @@ export const saveModels = internalMutation({
     models.forEach(m => idMap.set(m.id, m._id));
     for (const model of args.models) {
         const externalId = model[args.idField];
+        const title = model[args.titleField];
         const recordId = idMap.get(externalId);
         if (recordId) {
-            await ctx.db.patch(recordId, { details: model });
+            await ctx.db.patch(recordId, { details: model, title });
         } else {
             await ctx.db.insert('models', {
                 id: externalId,
+                title,
                 provider: args.provider as ModelProvider,
                 details: model,
             });
@@ -52,6 +56,7 @@ export const syncOpenRouterModels = internalAction({
         provider: 'openrouter',
         models: obj.data,
         idField: 'id',
+        titleField: 'name',
     });
   },
 });

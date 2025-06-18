@@ -21,12 +21,14 @@ const elfTables = {
   models: defineTable({
     provider: v.union(...modelProviders.map(p => v.literal(p))),
     id: v.string(),
+    title: v.string(),
     details: v.any(),
   }),
 
   keys: defineTable({
     userId: v.id("users"),
     provider: v.union(...modelProviders.map(p => v.literal(p))),
+    title: v.string(),
     value: v.string(),
   }).index("by_user", ["userId"]),
 
@@ -34,7 +36,14 @@ const elfTables = {
     userId: v.id("users"),
     title: v.string(),
     order: v.float64(),
-    // todo: colours
+    color: v.optional(v.string()),
+  }).index("by_user", ["userId"]),
+
+  settings: defineTable({
+    userId: v.id("users"),
+    spaceId: v.id("spaces"),
+    selectedModel: v.optional(v.string()),
+    selectedKey: v.optional(v.union(v.null(), v.id("keys"))),
   }).index("by_user", ["userId"]),
 
   tags: defineTable({
@@ -45,6 +54,7 @@ const elfTables = {
 
   chats: defineTable({
     userId: v.id("users"),
+    spaceId: v.id("spaces"),
     title: v.string(),
     created: v.int64(),
     tags: v.array(v.string()),
@@ -59,6 +69,7 @@ const elfTables = {
     created: v.int64(),
     replyMsgId: v.optional(v.id("messages")),
     replaceMsgId: v.optional(v.id("messages")),
+    model: v.optional(v.string()),
   }).index("by_user", ["userId"])
     .index("by_chat", ["chatId"]),
 
