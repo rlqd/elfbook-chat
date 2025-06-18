@@ -5,7 +5,7 @@ import type { Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 
 // Must support structured outputs, used to generate chat title and tags
-const utilityModel = process.env.ELF_UTILITY_MODEL ?? 'google/gemini-2.0-flash-lite-001';
+// const utilityModel = process.env.ELF_UTILITY_MODEL ?? 'google/gemini-2.0-flash-lite-001';
 
 async function exchangeMessages(
     ctx: MutationCtx,
