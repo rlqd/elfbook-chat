@@ -6,7 +6,7 @@ import { useState } from "react";
 import ReactModal from "react-modal";
 
 function AddKeyForm({close}: {close: () => void}) {
-  const addKey = useMutation(api.elf.addKey);
+  const addKey = useMutation(api.settings.addKey);
 
   const submitAddKey = async (data: FormData) => {
     const title = data.get("title");
@@ -42,9 +42,9 @@ export default function InputBar({spaceId, sendMessage}: InputBarProps) {
   const [inputText, setInputText] = useState("");
 
   const models = useQuery(api.models.listModels) ?? [];
-  const keys = useQuery(api.elf.listKeys) ?? [];
-  const settings = useQuery(api.elf.getSettings, {spaceId});
-  const editSettings = useMutation(api.elf.editSettings);
+  const keys = useQuery(api.settings.listKeys) ?? [];
+  const settings = useQuery(api.settings.getSettings, {spaceId});
+  const editSettings = useMutation(api.settings.editSettings);
 
   const selectedModel = settings?.selectedModel ?? 'openai/gpt-4o';
   const selectedKeyId = settings?.selectedKey;

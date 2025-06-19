@@ -29,6 +29,7 @@ async function exchangeMessages(
         body: "",
         created: BigInt(Date.now()),
         replyMsgId: userMsgId,
+        model,
     });
     await ctx.scheduler.runAfter(0, internal.chat.generateResponse, {
         messageId: modelMsgId,
@@ -97,16 +98,11 @@ export const saveChatMetadata = internalMutation({
             tags: args.tags,
         });
         for (const tag of args.tags) {
-            const exist = await ctx.db.query("tags")
-                .withIndex('by_title', q => q.eq("title", tag))
-                .first();
-            if (!exist) {
-                await ctx.db.insert('tags', {
-                    userId: args.userId,
-                    spaceId: args.spaceId,
-                    title: tag,
-                });
-            }
+            await ctx.runMutation(internal.elf.attachTag, {
+                userId: args.userId,
+                spaceId: args.spaceId,
+                title: tag,
+            });
         }
     },
 });
@@ -236,24 +232,6 @@ export const sendMessage = mutation({
             throw new Error("Key not found");
         }
         await exchangeMessages(ctx, userId, chat.spaceId, chat._id, key._id, args.model, args.text, false);
-    },
-});
-
-export const getChat = query({
-    args: {
-        chatId: v.id("chats"),
-    },
-
-    handler: async (ctx, args) => {
-        const userId = await getAuthUserId(ctx);
-        if (!userId) {
-            throw new Error("Not authenticated");
-        }
-        const chat = await ctx.db.get(args.chatId);
-        if (!chat || chat.userId !== userId) {
-            throw new Error("Chat not found");
-        }
-        return chat;
     },
 });
 

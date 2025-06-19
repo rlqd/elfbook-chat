@@ -43,6 +43,10 @@ body {
   display: inline-block;
 }
 
+*:not(:hover) > .elf-hover-hide {
+  display: none;
+}
+
 /* 
 @theme {
   --color-light: #ffffff;

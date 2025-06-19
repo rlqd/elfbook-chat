@@ -22,7 +22,7 @@ export default function Message({ msg }: { msg: Doc<"messages"> }) {
   return (
     <div className={"elf-message flex gap-2 " + (isMine ? 'text-blue-900' : '')}>
       <div className="pr-2 w-20 border-r border-dotted text-right">
-        { isMine ? 'me:' : 'model:' }
+        <span title={new Date(Number(msg.created)).toLocaleString() + (msg.model ? ` (${msg.model})` : '')}>{ isMine ? 'me:' : 'model:' }</span>
       </div>
       <div className="block grow w-full min-w-0 text-wrap">
         { statusMessages[msg.type] ?? (

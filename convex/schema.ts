@@ -50,6 +50,7 @@ const elfTables = {
     userId: v.id("users"),
     spaceId: v.id("spaces"),
     title: v.string(),
+    chatNum: v.optional(v.number()),
   }).index("by_user", ["userId"])
     .index("by_title", ["title"]),
 

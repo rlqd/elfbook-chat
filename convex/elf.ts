@@ -1,6 +1,7 @@
 import { v } from "convex/values";
-import { query, mutation } from "./_generated/server";
+import { query, mutation, internalMutation } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { internal } from "./_generated/api";
 
 export const addSpace = mutation({
     args: {
@@ -25,10 +26,11 @@ export const editSpace = mutation({
         spaceId: v.id("spaces"),
         title: v.optional(v.string()),
         order: v.optional(v.float64()),
+        color: v.optional(v.string()),
     },
 
     handler: async (ctx, args) => {
-        if (typeof args.title === 'undefined' && typeof args.order === 'undefined') {
+        if (typeof args.title === 'undefined' && typeof args.order === 'undefined' && typeof args.color === 'undefined') {
             throw new Error("No changes");
         }
         const userId = await getAuthUserId(ctx);
@@ -45,6 +47,9 @@ export const editSpace = mutation({
         }
         if (typeof args.order !== 'undefined') {
             updates.order = args.order;
+        }
+        if (typeof args.color !== 'undefined') {
+            updates.color = args.color;
         }
         await ctx.db.patch(args.spaceId, updates);
     },
@@ -120,96 +125,152 @@ export const listChats = query({
     },
 });
 
-export const addKey = mutation({
+export const getChat = query({
     args: {
+        chatId: v.id("chats"),
+    },
+
+    handler: async (ctx, args) => {
+        const userId = await getAuthUserId(ctx);
+        if (!userId) {
+            throw new Error("Not authenticated");
+        }
+        const chat = await ctx.db.get(args.chatId);
+        if (!chat || chat.userId !== userId) {
+            throw new Error("Chat not found");
+        }
+        return chat;
+    },
+});
+
+export const editChatTitle = mutation({
+    args: {
+        chatId: v.id("chats"),
         title: v.string(),
-        value: v.string(),
     },
 
     handler: async (ctx, args) => {
-        const userId = await getAuthUserId(ctx);
-        if (!userId) {
-            throw new Error("Not authenticated");
-        }
-        return await ctx.db.insert("keys", {
-            userId,
-            provider: 'openrouter',
-            ...args,
-        });
-    },
-});
-
-export const listKeys = query({
-    handler: async (ctx) => {
-        const userId = await getAuthUserId(ctx);
-        if (!userId) {
-            throw new Error("Not authenticated");
-        }
-        return await ctx.db
-            .query("keys")
-            .withIndex("by_user", q => q.eq("userId", userId))
-            .collect();
-    },
-});
-
-export const getSettings = query({
-    args: {
-        spaceId: v.id("spaces"),
-    },
-
-    handler: async (ctx, args) => {
-        const userId = await getAuthUserId(ctx);
-        if (!userId) {
-            throw new Error("Not authenticated");
-        }
-        return await ctx.db
-            .query("settings")
-            .withIndex("by_user", q => q.eq("userId", userId))
-            .filter(q => q.eq(q.field("spaceId"), args.spaceId))
-            .first();
-    },
-});
-
-export const editSettings = mutation({
-    args: {
-        spaceId: v.id("spaces"),
-        selectedModel: v.optional(v.string()),
-        selectedKey: v.optional(v.union(v.null(), v.id("keys"))),
-    },
-
-    handler: async (ctx, args) => {
-        if (typeof args.selectedModel === 'undefined' && typeof args.selectedKey === 'undefined') {
+        if (!args.title.length) {
             throw new Error("No changes");
         }
         const userId = await getAuthUserId(ctx);
         if (!userId) {
             throw new Error("Not authenticated");
         }
-        const settings = await ctx.db
-            .query("settings")
-            .withIndex("by_user", q => q.eq("userId", userId))
-            .filter(q => q.eq(q.field("spaceId"), args.spaceId))
+        const chat = await ctx.db.get(args.chatId);
+        if (!chat || chat.userId !== userId) {
+            throw new Error("Space not found");
+        }
+        await ctx.db.patch(args.chatId, { title: args.title });
+    },
+});
+
+export const addChatTag = mutation({
+    args: {
+        chatId: v.id("chats"),
+        tag: v.string(),
+    },
+
+    handler: async (ctx, args) => {
+        if (!args.tag.length) {
+            throw new Error("No changes");
+        }
+        const userId = await getAuthUserId(ctx);
+        if (!userId) {
+            throw new Error("Not authenticated");
+        }
+        const chat = await ctx.db.get(args.chatId);
+        if (!chat || chat.userId !== userId) {
+            throw new Error("Space not found");
+        }
+        if (chat.tags.includes(args.tag)) {
+            return;
+        }
+        await ctx.db.patch(args.chatId, { tags: [...chat.tags, args.tag] });
+        await ctx.runMutation(internal.elf.attachTag, {
+            userId,
+            spaceId: chat.spaceId,
+            title: args.tag,
+        });
+    },
+});
+
+export const delChatTag = mutation({
+    args: {
+        chatId: v.id("chats"),
+        tag: v.string(),
+    },
+
+    handler: async (ctx, args) => {
+        if (!args.tag.length) {
+            throw new Error("No changes");
+        }
+        const userId = await getAuthUserId(ctx);
+        if (!userId) {
+            throw new Error("Not authenticated");
+        }
+        const chat = await ctx.db.get(args.chatId);
+        if (!chat || chat.userId !== userId) {
+            throw new Error("Space not found");
+        }
+        if (!chat.tags.includes(args.tag)) {
+            return;
+        }
+        await ctx.db.patch(args.chatId, { tags: chat.tags.filter(t => t != args.tag) });
+        await ctx.runMutation(internal.elf.detachTag, {
+            userId,
+            title: args.tag,
+        });
+    },
+});
+
+export const attachTag = internalMutation({
+    args: {
+        title: v.string(),
+        userId: v.id("users"),
+        spaceId: v.id("spaces"),
+    },
+
+    handler: async (ctx, args) => {
+        const tagDoc = await ctx.db.query("tags")
+            .withIndex('by_user', q => q.eq("userId", args.userId))
+            .filter(q => q.eq(q.field("title"), args.title))
             .first();
-        if (!settings) {
-            const space = await ctx.db.get(args.spaceId);
-            if (!space || space.userId !== userId) {
-                throw new Error("Space not found");
-            }
-            await ctx.db.insert("settings", {
-                userId,
-                spaceId: args.spaceId,
-                selectedModel: args.selectedModel,
-                selectedKey: args.selectedKey,
+        if (tagDoc) {
+            await ctx.db.patch(tagDoc._id, {
+                chatNum: (tagDoc.chatNum ?? 0) + 1,
             });
         } else {
-            const updates: Partial<typeof args> = {};
-            if (typeof args.selectedKey !== 'undefined') {
-                updates.selectedKey = args.selectedKey;
-            }
-            if (typeof args.selectedModel !== 'undefined') {
-                updates.selectedModel = args.selectedModel;
-            }
-            await ctx.db.patch(settings._id, updates);
+            await ctx.db.insert('tags', {
+                userId: args.userId,
+                spaceId: args.spaceId,
+                title: args.title,
+                chatNum: 1,
+            });
+        }
+    },
+});
+
+export const detachTag = internalMutation({
+    args: {
+        userId: v.id("users"),
+        title: v.string(),
+    },
+
+    handler: async (ctx, args) => {
+        const tagDoc = await ctx.db.query("tags")
+            .withIndex('by_user', q => q.eq("userId", args.userId))
+            .filter(q => q.eq(q.field("title"), args.title))
+            .first();
+        if (!tagDoc?.chatNum) {
+            return;
+        }
+        if (tagDoc.chatNum > 1) {
+            await ctx.db.patch(tagDoc._id, {
+                chatNum: tagDoc.chatNum - 1,
+            });
+        } else {
+            await ctx.db.delete(tagDoc._id);
         }
     },
 });

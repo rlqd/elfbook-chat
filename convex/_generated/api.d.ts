@@ -20,6 +20,7 @@ import type * as elf from "../elf.js";
 import type * as http from "../http.js";
 import type * as lib_openrouter from "../lib/openrouter.js";
 import type * as models from "../models.js";
+import type * as settings from "../settings.js";
 
 /**
  * A utility for referencing Convex functions in your app's API.
@@ -37,6 +38,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   "lib/openrouter": typeof lib_openrouter;
   models: typeof models;
+  settings: typeof settings;
 }>;
 export declare const api: FilterApi<
   typeof fullApi,
