@@ -111,11 +111,12 @@ export const listChats = query({
         if (!userId) {
             throw new Error("Not authenticated");
         }
-        return await ctx.db
+        const chats = await ctx.db
             .query("chats")
             .withIndex("by_user", q => q.eq("userId", userId))
             .filter(q => q.eq(q.field("spaceId"), args.spaceId))
             .collect();
+        return chats.sort((a,b) => Number(b.created - a.created));
     },
 });
 

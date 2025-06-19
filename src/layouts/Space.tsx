@@ -13,7 +13,7 @@ export default function Space() {
 
   return (
     <div className="flex h-screen w-screen">
-      <SideMenu space={space} className="w-50 h-full shadow/30 z-100 p-2" />
+      <SideMenu space={space} className="w-52 h-full shadow/30 z-100 p-2 min-w-0" />
       <div className="grow h-full flex flex-col w-full min-w-0">
         <Outlet />
       </div>
