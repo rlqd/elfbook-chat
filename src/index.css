@@ -1,5 +1,26 @@
 @import "tailwindcss";
 
+@theme {
+  --color-dark: #333;
+
+  @keyframes blink {
+    0%,
+    100% {
+      opacity: 0.2;
+    }
+    20% {
+      opacity: 1;
+    }
+    40% {
+      opacity: 1;
+    }
+  }
+
+  --animate-blink-1: blink 1.4s infinite ease-in-out;
+  --animate-blink-2: blink 1.4s infinite ease-in-out 0.2s;
+  --animate-blink-3: blink 1.4s infinite ease-in-out 0.4s;
+}
+
 :root {
   --color-primary: #333;
   --color-background: #96d3b9;

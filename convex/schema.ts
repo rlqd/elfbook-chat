@@ -50,7 +50,8 @@ const elfTables = {
     userId: v.id("users"),
     spaceId: v.id("spaces"),
     title: v.string(),
-  }).index("by_user", ["userId"]),
+  }).index("by_user", ["userId"])
+    .index("by_title", ["title"]),
 
   chats: defineTable({
     userId: v.id("users"),

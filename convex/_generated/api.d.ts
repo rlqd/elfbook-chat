@@ -18,6 +18,7 @@ import type * as chat from "../chat.js";
 import type * as crons from "../crons.js";
 import type * as elf from "../elf.js";
 import type * as http from "../http.js";
+import type * as lib_openrouter from "../lib/openrouter.js";
 import type * as models from "../models.js";
 
 /**
@@ -34,6 +35,7 @@ declare const fullApi: ApiFromModules<{
   crons: typeof crons;
   elf: typeof elf;
   http: typeof http;
+  "lib/openrouter": typeof lib_openrouter;
   models: typeof models;
 }>;
 export declare const api: FilterApi<

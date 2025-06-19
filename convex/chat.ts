@@ -3,13 +3,12 @@ import { query, mutation, internalMutation, internalAction, internalQuery, type 
 import { getAuthUserId } from "@convex-dev/auth/server";
 import type { Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
-
-// Must support structured outputs, used to generate chat title and tags
-// const utilityModel = process.env.ELF_UTILITY_MODEL ?? 'google/gemini-2.0-flash-lite-001';
+import { streamLLMResponse, generateChatMetadata } from "./lib/openrouter";
 
 async function exchangeMessages(
     ctx: MutationCtx,
     userId: Id<"users">,
+    spaceId: Id<"spaces">,
     chatId: Id<"chats">,
     keyId: Id<"keys">,
     model: string,
@@ -33,6 +32,8 @@ async function exchangeMessages(
     });
     await ctx.scheduler.runAfter(0, internal.chat.generateResponse, {
         messageId: modelMsgId,
+        userId,
+        spaceId,
         chatId,
         keyId,
         model,
@@ -81,8 +82,10 @@ export const markMessageDone = internalMutation({
     },
 });
 
-export const updateChatInfo = internalMutation({
+export const saveChatMetadata = internalMutation({
     args: {
+        userId: v.id("users"),
+        spaceId: v.id("spaces"),
         chatId: v.id("chats"),
         title: v.string(),
         tags: v.array(v.string()),
@@ -93,6 +96,18 @@ export const updateChatInfo = internalMutation({
             title: args.title,
             tags: args.tags,
         });
+        for (const tag of args.tags) {
+            const exist = await ctx.db.query("tags")
+                .withIndex('by_title', q => q.eq("title", tag))
+                .first();
+            if (!exist) {
+                await ctx.db.insert('tags', {
+                    userId: args.userId,
+                    spaceId: args.spaceId,
+                    title: tag,
+                });
+            }
+        }
     },
 });
 
@@ -120,6 +135,8 @@ export const loadMessageHistoryAsContext = internalQuery({
 
 export const generateResponse = internalAction({
     args: {
+        userId: v.id("users"),
+        spaceId: v.id("spaces"),
         chatId: v.id("chats"),
         messageId: v.id("messages"),
         keyId: v.id("keys"),
@@ -130,103 +147,29 @@ export const generateResponse = internalAction({
     handler: async (ctx, args) => {
         const keySecret = await ctx.runQuery(internal.chat.getKeySecret, { keyId: args.keyId });
         const messages = await ctx.runQuery(internal.chat.loadMessageHistoryAsContext, { chatId: args.chatId });
-        const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-                Authorization: `Bearer ${keySecret}`,
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                model: args.model,
-                messages,
-                stream: true,
-            }),
-        });
-        const reader = response.body?.getReader();
-        if (!reader) {
-            throw new Error('Response body is not readable');
+        if (!messages.length) {
+            throw new Error('No context found to generate response');
         }
-        const decoder = new TextDecoder();
-        let buffer = '';
         let msgBuf = '';
-        try {
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                // Append new chunk to buffer
-                buffer += decoder.decode(value, { stream: true });
-                // Process complete lines from buffer
-                while (true) {
-                    const lineEnd = buffer.indexOf('\n');
-                    if (lineEnd === -1) break;
-                    const line = buffer.slice(0, lineEnd).trim();
-                    buffer = buffer.slice(lineEnd + 1);
-                    if (line.startsWith('data: ')) {
-                        const data = line.slice(6);
-                        if (data === '[DONE]') break;
-                        try {
-                            const parsed = JSON.parse(data);
-                            const content = parsed.choices[0].delta.content;
-                            if (content) {
-                                msgBuf += content;
-                                await ctx.runMutation(internal.chat.streamMessageText, { messageId: args.messageId, newText: msgBuf });
-                            }
-                        } catch (e) {
-                            // Ignore invalid JSON
-                        }
-                    }
-                }
-            }
-        } finally {
-            reader.cancel();
+        for await (const chunk of streamLLMResponse(keySecret, args.model, messages)) {
+            msgBuf += chunk;
+            await ctx.runMutation(internal.chat.streamMessageText, { messageId: args.messageId, newText: msgBuf });
         }
         await ctx.runMutation(internal.chat.markMessageDone, { messageId: args.messageId });
         if (args.isNew) {
-            // messages.push({ role: 'assistant', content: msgBuf });
-            // messages.push({ role: 'user', content: 'Please generate chat info (metadata) based on the message content above, strictly follow the provided schema. Example: {"title": "Chat Title", "tags": ["tag1", "tag2"]}' });
-            // const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-            //     method: 'POST',
-            //     headers: {
-            //         Authorization: `Bearer ${keySecret}`,
-            //         'Content-Type': 'application/json',
-            //     },
-            //     body: JSON.stringify({
-            //         model: utilityModel,
-            //         messages,
-            //         response_format: {
-            //             type: 'json_schema',
-            //             json_schema: {
-            //                 name: 'chat_info',
-            //                 strict: true,
-            //                 schema: {
-            //                     type: 'object',
-            //                     properties: {
-            //                         title: {
-            //                             type: 'string',
-            //                             description: 'Very short chat title',
-            //                         },
-            //                         tags: {
-            //                             type: 'array',
-            //                             description: 'Between 1 and 3 relevant single word tags',
-            //                             items: {
-            //                                 type: 'string',
-            //                             },
-            //                         },
-            //                     },
-            //                     required: ['title', 'tags'],
-            //                     additionalProperties: false,
-            //                 },
-            //             },
-            //         },
-            //     }),
-            // });
-            // const data = await response.json();
-            // const chatInfo = data.choices[0].message.content;
-            // await ctx.runMutation(internal.chat.updateChatInfo, {
-            //     chatId: args.chatId,
-            //     title: chatInfo.title,
-            //     tags: chatInfo.tags,
-            // });
+            const chatMetadata = await generateChatMetadata(
+                keySecret,
+                messages[messages.length - 1],
+                { role: 'assistant', content: msgBuf },
+            );
+            if (chatMetadata) {
+                await ctx.runMutation(internal.chat.saveChatMetadata, {
+                    userId: args.userId,
+                    spaceId: args.spaceId,
+                    chatId: args.chatId,
+                    ...chatMetadata,
+                });
+            }
         }
     },
 });
@@ -266,7 +209,7 @@ export const startChat = mutation({
             created: BigInt(Date.now()),
             tags: [],
         });
-        await exchangeMessages(ctx, userId, chatId, key._id, args.model, args.messageText, true);
+        await exchangeMessages(ctx, userId, space._id, chatId, key._id, args.model, args.messageText, true);
         return chatId;
     },
 });
@@ -292,7 +235,7 @@ export const sendMessage = mutation({
         if (!key || key.userId !== userId) {
             throw new Error("Key not found");
         }
-        await exchangeMessages(ctx, userId, chat._id, key._id, args.model, args.text, false);
+        await exchangeMessages(ctx, userId, chat.spaceId, chat._id, key._id, args.model, args.text, false);
     },
 });
 
